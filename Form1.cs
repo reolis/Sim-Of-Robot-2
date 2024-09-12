@@ -248,7 +248,6 @@ namespace Krasnyanskaya221327_Lab02_Sem5_Ver1
             public static void MoveBack()
             {
                 SetCommand("F", -100);
-                SetCommand("B", 0);
             }
 
             public static void Stop()
@@ -322,42 +321,58 @@ namespace Krasnyanskaya221327_Lab02_Sem5_Ver1
 
                 // Приводим к диапазону [-180, 180]
                 if (deltaAngle > 180)
-                    deltaAngle += 360;
-                else if (deltaAngle < -180)
                     deltaAngle -= 360;
+                else if (deltaAngle < -180)
+                    deltaAngle += 360;
 
                 return deltaAngle;
             }
 
             public static void PerformRandomWalk()
             {
-                // Определяем пороговое значение для минимального расстояния
-                const double minDistance = 85;
+                // Пороговые значения расстояния до стены
+                const double minSafeDistance = 60;  // Минимальное безопасное расстояние
+                const double maxSafeDistance = 120;  // Максимальное безопасное расстояние
 
-                // Получаем данные о расстояниях до стен
-                double[] distances = { d0, d1, d2, d3, d4, d5, d6, d7 };
-                double[] anglesInRadians = angles.Select(angle => angle * Math.PI / 180).ToArray();
+                // Получаем данные о расстояниях до стен, но игнорируем передний (d0) и задний (d4) дальномеры
+                double[] distances = { d1, d2, d3, d5, d6, d7 };
+                double[] anglesInRadians = { angles[1], angles[2], angles[3], angles[5], angles[6], angles[7] };
+                double[] radians = anglesInRadians.Select(angle => angle * Math.PI / 180).ToArray();
 
                 // Находим направление с наибольшим расстоянием до стены
                 int bestDirection = -1;
                 double maxDistance = 0;
 
+                // Проходим по каждому боковому дальномеру и проверяем расстояние
                 for (int i = 0; i < distances.Length; i++)
                 {
-                    if (distances[i] > maxDistance && distances[i] > minDistance)
+                    // Если расстояние больше минимального и меньше максимального
+                    if (distances[i] > minSafeDistance && distances[i] < maxSafeDistance)
                     {
-                        maxDistance = distances[i];
-                        bestDirection = i;
+                        // Запоминаем это направление как безопасное
+                        if (distances[i] > maxDistance)
+                        {
+                            maxDistance = distances[i];
+                            bestDirection = i;
+                        }
                     }
                 }
 
-                // Если подходящее направление найдено
+                // Если подходящее безопасное направление найдено
                 if (bestDirection != -1)
                 {
-                    // Определяем угол для поворота
+                    // Определяем угол для поворота к безопасному направлению
                     double angleToTurn = anglesInRadians[bestDirection] * (180 / Math.PI) - az;
 
                     // Приводим угол к диапазону [-180, 180]
+                    if (angleToTurn > 180) angleToTurn -= 360;
+                    if (angleToTurn < -180) angleToTurn += 360;
+
+                    // Добавляем случайный угол для разнообразия движения
+                    int randomOffset = random.Next(-30, 31);  // Случайное отклонение в диапазоне [-30, 30] градусов
+                    angleToTurn += randomOffset;
+
+                    // Приводим угол обратно к диапазону [-180, 180] после добавления случайного отклонения
                     if (angleToTurn > 180) angleToTurn -= 360;
                     if (angleToTurn < -180) angleToTurn += 360;
 
@@ -365,37 +380,49 @@ namespace Krasnyanskaya221327_Lab02_Sem5_Ver1
                     int turnSpeed = Math.Abs((int)angleToTurn) * 100 / 180;
                     turnSpeed = Math.Max(turnSpeed, 10);
 
-                    // Устанавливаем команду поворота и движение вперед
+                    // Поворачиваем в выбранное направление и движемся вперед
                     if (angleToTurn > 0)
                     {
-                        SetCommand("B", turnSpeed);  // Вправо
+                        SetCommand("B", -turnSpeed);  // Поворот вправо
                         MoveStraight();
                     }
                     else
                     {
-                        SetCommand("B", -turnSpeed); // Влево
+                        SetCommand("B", turnSpeed);  // Поворот влево
                         MoveStraight();
                     }
                 }
                 else
                 {
-                    // Если не удалось найти безопасное направление, выбираем случайное направление
+                    // Если не найдено безопасного направления, двигаемся случайным образом
                     int randomAngle = GetRandomAngle(moveToInterestPoint: false);
+
+                    // Генерируем случайный угол с уклоном влево или вправо, избегая стены
+                    if (randomAngle > 0)
+                    {
+                        randomAngle = random.Next(-90, 0);
+                    }
+                    else
+                    {
+                        randomAngle = random.Next(0, 90);
+                    }
+
                     int turnSpeed = Math.Abs(randomAngle) * 100 / 180;
                     turnSpeed = Math.Max(turnSpeed, 10);
 
                     // Устанавливаем команду поворота и движение вперед
                     if (randomAngle > 0)
                     {
-                        SetCommand("B", turnSpeed);  // Вправо
+                        SetCommand("B", -turnSpeed);  // Поворот вправо
                         MoveStraight();
                     }
                     else
                     {
-                        SetCommand("B", -turnSpeed); // Влево
+                        SetCommand("B", turnSpeed);  // Поворот влево
                         MoveStraight();
                     }
                 }
+
             }
 
 
@@ -406,12 +433,26 @@ namespace Krasnyanskaya221327_Lab02_Sem5_Ver1
                     // При столкновении определяем свободное направление
                     distances = new double[] { d0, d1, d2, d3, d4, d5, d6, d7 };
                     int closestDirection = Array.IndexOf(distances, distances.Min());
-                    int turnDirection = (closestDirection < 30) ? 1 : -1;
+                    //int turnDirection = (closestDirection < 100) ? -1 : 1;
 
                     // Двигаемся назад и поворачиваем в свободное направление
                     MoveBack();
-                    SetCommand("B", -100 * turnDirection);
-                    isMovingBack = true;
+
+                    if (closestDirection < 100)
+                    {
+                        if (UDPServer.l4 == 0)
+                        {
+                            SetCommand("B", 70);
+                            MoveBack();
+                            isMovingBack = true;
+                        }
+                        else if (UDPServer.l3 == 0)
+                        {
+                            SetCommand("B", -70);
+                            MoveBack();
+                            isMovingBack = true;
+                        }
+                    }
                 }
                 else
                 {
@@ -467,6 +508,10 @@ namespace Krasnyanskaya221327_Lab02_Sem5_Ver1
 
         private void Form1_Load(object sender, EventArgs e)
         {
+            pictureBox1.BackColor = Color.Red;
+            pictureBox2.BackColor = Color.Red;
+            pictureBox3.BackColor = Color.Red;
+
             string solutionDirectory = Directory.GetParent(AppDomain.CurrentDomain.BaseDirectory).Parent.Parent.Parent.FullName;
             string filePath = Path.Combine(solutionDirectory, "textbox_data.json");
 
@@ -624,16 +669,28 @@ namespace Krasnyanskaya221327_Lab02_Sem5_Ver1
                         {
                             Robot.isFirstTargetDone = true;
                             Robot.Distance = 800;
+                            Robot.SetCommand("B", -35);
+                            Robot.SetCommand("F", 100);
+
+                            pictureBox1.BackColor = Color.Lime;
                         }
                         else if (countOfTargets > 0 && UDPServer.c == 2)
                         {
                             Robot.isSecondTargetDone = true;
                             Robot.Distance = 800;
+                            Robot.SetCommand("B", -35);
+                            Robot.SetCommand("F", 100);
+
+                            pictureBox2.BackColor = Color.Lime;
                         }
                         else if (countOfTargets > 0 && UDPServer.c == 3)
                         {
                             Robot.isThirdTargetDone = true;
                             Robot.Distance = 800;
+                            Robot.SetCommand("B", -25);
+                            Robot.SetCommand("F", 100);
+
+                            pictureBox3.BackColor = Color.Lime;
                         }
                     }
                     count++;
